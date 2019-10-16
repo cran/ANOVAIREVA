@@ -1,0 +1,485 @@
+---
+title: "ANOVA Interactive"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(car)# for Anova
+library(ggplot2)# for plots
+library(plotly)# plots
+library(datasets)
+```
+ANOVA (short of Analysis of Variance) is a statistical tool for determining differences/Variances between two or more groups of independent variables.
+One way ANOVA checks for one independent variable whereas Two way ANOVA checks for two independent variables.
+They can also be checked for interaction effect i.e. The presence of one causes changes in the other.
+Further t test is performed to find which level of independent variable shows variation.
+Independent variable and Dependent variable are Categorical and Metric respectively.
+```{r,echo=FALSE}
+cat(sprintf("\n "))
+
+#inputpanel
+sidebarPanel(
+  inputPanel(
+    checkboxInput("Choice","Check to choose your own file",value=FALSE),
+    fileInput("file","Upload a file in *.csv format with headers",placeholder = "No file selected"),
+    uiOutput("Var1"),
+    uiOutput("Var2"),
+    uiOutput("Var3"),
+    selectInput("way", " select the anova technique to be used", choices= c("one way","two way")),
+    uiOutput("int"),
+    downloadButton("dataset"," Download dataset"),
+    downloadButton("plot","Download Plot")
+    
+  )
+)
+
+
+  #selection ofvariable 1
+output$Var1<- renderUI({
+  if (input$Choice==FALSE) {
+  data("iris")
+    
+  data= iris
+    data=select_if(data,is.numeric)
+  selectInput("var1"," Select the dependent variable",choices = colnames(data))
+  }
+  else {
+  
+  file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  
+  data=select_if(data,is.numeric)
+  selectInput("var1"," Select the dependent variable",choices = colnames(data))
+  }
+})
+
+#selection of variable 2
+output$Var2<- renderUI({
+  if (input$Choice==FALSE) {
+  
+  data("iris")
+    
+  data= iris
+  data=select_if(data,is.factor)
+  selectInput("var2","Select the independent variable 1",choices = colnames(data))
+  }
+  
+else{
+  file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  
+  data=select_if(data,is.factor)
+  selectInput("var2","Select the independent variable 1",choices = colnames(data))
+   }
+  })
+
+
+#selection of third variable for two way
+output$Var3<- renderUI({
+  
+  if (input$way=="two way") {
+    if (input$Choice==FALSE) {
+  
+  data("iris")
+    
+  data= iris
+    data=select_if(data,is.factor)
+    data=select(data,-c(input$var2))
+    selectInput("var3","Select the independent variable 2",choices = colnames(data))
+    }
+   else{
+  file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  
+  
+    data=select_if(data,is.factor)
+    data=select(data,-c(input$var2))
+    selectInput("var3","Select the independent variable 2",choices = colnames(data))
+  }
+   }
+})
+
+
+
+#selection of whether or not to check for interaction effect
+output$int<-renderUI({
+  
+  if (input$way=="two way") {
+    selectInput("inter","Please select whether to check for interaction or not",choices = c("no","yes"))
+  }
+  
+})
+
+
+# tabs
+mainPanel(
+  
+  tabsetPanel(
+    tabPanel("Summary",verbatimTextOutput("summ")),
+    tabPanel("Anova",verbatimTextOutput("ANOVA")),
+    tabPanel("Post Hoc(for single variables) ",verbatimTextOutput("PH")),
+    tabPanel("Visualization",plotlyOutput("Plot"))
+  ),
+  h6("Designed and Developed by : Ms. Revathi Kumar", tags$img(src ="R.JPG", height= 200, width=200)),
+  h6("Mentored by  :", tags$img(src ="K.JPG", height= 300, width=300))
+
+  
+ )
+
+
+#for the summary of the data
+
+output$summ<- renderPrint({
+  if (input$Choice==FALSE) {
+  
+  data("iris")
+    
+  data= iris
+  
+  str(data)
+  
+  summary(data)
+  
+  cat(sprintf("\n The summary of the dataset is as follows:\n"))
+  print(summary(data))
+  }
+  else{
+    
+  file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  
+  str(data)
+  
+  summary(data)
+  
+  cat(sprintf("\n The summary of the dataset is as follows:\n"))
+  print(summary(data))
+  
+  }
+})
+
+
+#for ANOVA test
+output$ANOVA<- renderPrint({
+  
+  if (input$Choice==FALSE) {
+    
+  data("iris")
+    
+  data= iris
+ 
+  if (input$way=="one way") {
+    cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var2))
+    cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var2))
+    mod= paste(input$var1,input$var2,sep = "~")
+    
+    model=lm(formula = as.formula(mod),data = data)
+    a<- aov(model)
+    
+    summary(a)
+    
+  }
+  
+  
+  else {
+    
+    if (input$inter=="no") {
+      
+      cat(sprintf("\n Hypothesis 1\n"))
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var2))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var2))
+      
+      cat(sprintf("\n Hypothesis 2\n"))  
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var3))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var3))
+      mo=paste(input$var2,input$var3,sep = "+")
+      mod1= paste(input$var1,mo,sep = "~")
+      
+      model=lm(formula = as.formula(mod1),data = data)
+      a<- Anova(model)
+      
+    }
+
+    else{
+      
+      cat(sprintf("\n Hypothesis 1\n"))
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var2))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var2))
+      
+      cat(sprintf("\n Hypothesis 2\n"))  
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var3))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var3))
+      cat(sprintf("\n Hypothesis 3\n"))  
+      cat(sprintf("\n Null Hypothesis : there is no interaction between %s and %s",input$var2,input$var3))
+      cat(sprintf("\n Alternate Hypothesis : there is interaction between %s and %s\n",input$var2,input$var3))
+      m=paste(input$var2,input$var3,sep = "*")
+      mo=paste(input$var2,input$var3,m,sep = "+")
+      mod1= paste(input$var1,mo,sep = "~")
+      
+      model=lm(formula = as.formula(mod1),data = data)
+      a<- Anova(model)
+    }
+    
+    print(a)
+    
+  }
+  }
+  else {
+    
+   file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+ 
+  if (input$way=="one way") {
+    cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var2))
+    cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var2))
+    mod= paste(input$var1,input$var2,sep = "~")
+    
+    model=lm(formula = as.formula(mod),data = data)
+    a<- aov(model)
+    
+    summary(a)
+    
+  }
+  
+  
+  else {
+    
+    if (input$inter=="no") {
+      
+      cat(sprintf("\n Hypothesis 1\n"))
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var2))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var2))
+      
+      cat(sprintf("\n Hypothesis 2\n"))  
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var3))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var3))
+      mo=paste(input$var2,input$var3,sep = "+")
+      mod1= paste(input$var1,mo,sep = "~")
+      
+      model=lm(formula = as.formula(mod1),data = data)
+      a<- Anova(model)
+      
+    }
+
+    else{
+      
+      cat(sprintf("\n Hypothesis 1\n"))
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var2))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var2))
+      
+      cat(sprintf("\n Hypothesis 2\n"))  
+      cat(sprintf("\n Null Hypothesis : means of %s is uniform across all groups of %s\n",input$var1,input$var3))
+      cat(sprintf("\n Alternate Hypothesis : means of %s is not uniform across all groups of %s\n",input$var1,input$var3))
+      cat(sprintf("\n Hypothesis 3\n"))  
+      cat(sprintf("\n Null Hypothesis : there is no interaction between %s and %s",input$var2,input$var3))
+      cat(sprintf("\n Alternate Hypothesis : there is interaction between %s and %s\n",input$var2,input$var3))
+      m=paste(input$var2,input$var3,sep = "*")
+      mo=paste(input$var2,input$var3,m,sep = "+")
+      mod1= paste(input$var1,mo,sep = "~")
+      
+      model=lm(formula = as.formula(mod1),data = data)
+      a<- Anova(model)
+    }
+    
+    print(a)
+    
+  }
+  }
+})
+  
+
+
+
+#for Post Hoc test
+output$PH<- renderPrint({
+  
+  if(input$Choice==FALSE){
+    data("iris")
+    
+  data= iris
+    
+  mod= paste(input$var1,input$var2,sep = "~")
+  
+  model=lm(formula = as.formula(mod),data = data)
+  a<- aov(model)
+  
+  TukeyHSD(a)
+  }
+  else{
+     file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  
+  mod= paste(input$var1,input$var2,sep = "~")
+  
+  model=lm(formula = as.formula(mod),data = data)
+  a<- aov(model)
+  
+  TukeyHSD(a)
+  }
+  
+})
+
+
+#plot 
+output$Plot <- renderPlotly({
+  
+  if(input$Choice==FALSE){
+    data("iris")
+    
+  data= iris
+  if(input$way=="one way"){
+    
+    
+    b<-ggplot(data = data, aes_string(x=  input$var2,y= input$var1, fill = input$var2 ))+labs(y=input$var1,x=input$var2)+ geom_boxplot()
+    
+    b<- ggplotly(b)
+    
+    print(b)}
+  
+  else
+  {
+    
+    
+    w= aggregate(data[,input$var1],by=list(k= data[,input$var2],l= data[,input$var3]),mean)
+    
+    b<-ggplot(data= w, aes_string(x= w$k, y= w$x,fill= w$l ))+labs(y=input$var1,x=input$var2,fill= input$var3 )+theme(legend.position = "top")+geom_line(aes_string(group= w$l))+ geom_point() 
+    
+    b<- ggplotly(b)
+    
+    print(b)
+  }
+  }
+  else{
+     file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  
+    if(input$way=="one way"){
+    
+    
+    b<-ggplot(data = data, aes_string(x=  input$var2,y= input$var1, fill = input$var2 ))+labs(y=input$var1,x=input$var2)+ geom_boxplot()
+    
+    b<- ggplotly(b)
+    
+    print(b)}
+  
+  else
+  {
+    
+    
+    w= aggregate(data[,input$var1],by=list(k= data[,input$var2],l= data[,input$var3]),mean)
+    
+    b<-ggplot(data= w, aes_string(x= w$k, y= w$x,fill= w$l ))+labs(y=input$var1,x=input$var2,fill= input$var3 )+theme(legend.position = "top")+geom_line(aes_string(group= w$l))+ geom_point() 
+    
+    b<- ggplotly(b)
+    
+    print(b)
+  }
+  }
+  
+})
+
+#for downloading the dataset
+datasetInput1<- reactive({
+  
+  if(input$Choice==FALSE){
+    data("iris")
+    
+  data= iris
+  data1<- data.frame(data)
+  }
+  else
+  {
+    file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  data1<-data.frame(data)
+  }
+  
+})
+
+output$dataset<-downloadHandler(
+  filename = function(){
+    paste("dataset",".csv",sep = "")
+  },
+  content = function(file){write.csv(datasetInput1(),file,row.names = FALSE)}
+)
+
+plotInput1<-reactive({
+  
+  if (input$Choice==FALSE) {
+    data("iris")
+    
+  data= iris
+  }
+    else{
+    file1=input$file
+  if (is.null(file1)){return()}
+  
+  data = read.table(file =  file1$datapath,sep = ",",header = TRUE)
+  if (is.null(data())){return()}
+  }
+  
+  if(input$way=="one way"){
+    
+    
+    b<-ggplot(data = data, aes_string(x=  input$var2,y= input$var1, fill = input$var2 ))+labs(y=input$var1,x=input$var2)+ geom_boxplot() 
+  
+    
+    print(b)
+    
+    }
+  
+  else
+  {
+    
+    w= aggregate(data[,input$var1],by=list(k= data[,input$var2],l= data[,input$var3]),mean)
+    
+    b<-ggplot(data= w, aes_string(x= w$k, y= w$x,fill= w$l ))+labs(y=input$var1,x=input$var2,fill= input$var3 )+theme(legend.position = "top")+geom_line(aes_string(group= w$l))+ geom_point() 
+  
+    
+    print(b)
+  }
+  
+})
+
+output$plot<-downloadHandler(
+  filename = function() { paste("PLOT", '.png', sep='') },
+  content = function(file) {
+    ggsave(file,plotInput1())
+    })
+
+
+
+
+
+
+
+
+
+```
